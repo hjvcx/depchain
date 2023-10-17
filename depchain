@@ -126,6 +126,10 @@ def main():
 
     global already_shown
     already_shown = list()
-    print_dep(args['<package>'])
+    if args['<package>'] in pack_dep:
+        print_dep(args['<package>'])
+    else:
+        print(f"No package {args['<package>']} found.", file=sys.stderr)
+        sys.exit(1)
 
 main()
