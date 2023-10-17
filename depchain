@@ -15,63 +15,8 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import gzip
 import os
-
-already_shown = list()
-G = nx.DiGraph()
-nodes = list()
-
-def get_package_dependencies(package_name):
-    if package_name not in already_shown:
-        already_shown.append(package_name)
-    else:
-        return
-
-    print(package_name)
-    if package_name not in nodes:
-        nodes.append(package_name)
-        G.add_node(package_name)
-
-    if package_name in set(packages_list):
-        pindex = packages_list.index(package_name)
-        for d in depends_list[pindex].split(', '):
-            if d:
-                print(d)
-                if d not in nodes:
-                    nodes.append(d)
-                    G.add_node(d)
-                G.add_edge(package_name, d)
-                get_package_dependencies(d)
-    else:
-        command = ["apt-cache", "depends", package_name]
-        env = {"LANG": "en_US.UTF-8"}
-        try:
-            lines = subprocess.check_output(command, env=env).decode("utf-8").splitlines()
-
-            depends_lines = list()
-            for line in lines:
-                if '  Depends:' in line or ' |Depends:' in line:
-                    dline = line[11:]
-                    if dline[0] == '<':
-                        dline = dline[1:-1]
-                    depends_lines.append(dline)
-                    if dline not in nodes:
-                        nodes.append(dline)
-                        G.add_node(dline)
-
-            for line in depends_lines:
-                G.add_edge(package_name, line)
-
-            if depends_lines:
-                print(depends_lines)
-            print()
-
-            if depends_lines:
-                for line in depends_lines:
-                    get_package_dependencies(line)
-
-        except subprocess.CalledProcessError:
-            print('Something went wrong...', file=sys.stderr)
-            sys.exit(1)
+from pprint import pprint
+import re
 
 def arg_parse():
     global args
@@ -88,61 +33,102 @@ def arg_parse():
         print('Error. No file found:', args['<file>'], file=sys.stderr)
         sys.exit(1)
 
-def get_pd_lists(contents):
-    plist = list()
-    dlist = list()
-    dfound = False
+def find_pack_dep(string):
+    package_match = re.search(r'Package:\s(.*?)\n', string)
+    depends_match = re.search(r'Depends:\s(.*?)\n', string)
 
-    for c in contents:
-        if 'Package: ' in c:
-            plist.append(c[9:])
-        if 'Depends: ' in c:
-            dlist.append(c[9:])
-            dfound = True
-        if c == '' and not dfound:
-            dlist.append('')
+    try:
+        if package_match:
+            package = package_match.group(1)
+        else:
+            package = 'NO_PACKAGE_NAME'
 
-    return plist, dlist
+        if depends_match:
+            depends = depends_match.group(1)
+        else:
+            depends = 'NO_DEPENDS_FOUND'
+    except:
+        print("Error, Try Again", file=sys.stderr)
+
+    return package, depends
+
+def read_packages(filename):
+    with gzip.open(filename, 'rt') as file:
+        data = file.read()
+        package_records = re.split(r'\n\n', data)
+
+    return package_records
+
+def flatten_list(nested_list):
+    flattened_list = []
+
+    for sublist in nested_list:
+        if isinstance(sublist, list):
+            flattened_list.extend(sublist)
+        else:
+            flattened_list.append(sublist)
+
+    return flattened_list
+
+def rstrip_any(o_list):
+    for i in range(len(o_list)):
+        if o_list[i].endswith(":any"):
+            o_list[i] = o_list[i].rstrip(":any")
+
+    return o_list
+
+def print_dep(package_name):
+    if package_name in pack_dep and package_name not in already_shown:
+
+        already_shown.append(package_name)
+        print(package_name, ':', pack_dep[package_name])
+        print()
+    else:
+        return
+
+    for dep in pack_dep[package_name]:
+        print_dep(dep)
 
 def main():
     arg_parse()
 
-    contents = file.readlines()
+    # Открываем gz файл и делим данные пакетов
+    packages_info = read_packages('Packages.gz')
 
-    if not os.path.isfile('ptest'):
-        with open('ptest', 'w') as f:
-            for c in contents:
-                f.write(c)
+    # Создаем словарь где ключ название пакета, а значение его Depends
+    global pack_dep
+    pack_dep = {}
+    for i in range(len(packages_info)):
+        key, value = find_pack_dep(packages_info[i]) # packages depends full
 
+        try:
+            value = value.split(', ')
+        except:
+            print(value)
+            sys.exit(1)
 
-    pfilename = args['<file>'] + '.p'
-    dfilename = args['<file>'] + '.d'
-    global packages_list
-    global depends_list
-    if not os.path.isfile(pfilename):
-        packages_list, depends_list = get_pd_lists(contents)
-        with open(pfilename, 'w') as f:
-            for p in packages_list:
-                f.write(p)
-        with open(dfilename, 'w') as f:
-            for d in depends_list:
-                f.write(d)
-    else:
-        with open(pfilename, 'r') as f:
-            packages_list = f.readlines()
-        with open(dfilename, 'r') as f:
-            depends_list = f.readlines()
+        for i in range(len(value)):
+            if '|' not in value[i]:
+                value[i] = value[i].split()[0] # xxx (qqq) -> xxx
+            else:
+                value[i] = value[i].split(' | ') # xxx | ccc -> [xxx, ccc]
+                for j in range(len(value[i])):
+                    value[i][j] = value[i][j].split()[0] # xxx (qqq) -> xxx
 
-    if args['<package>']:
-        get_package_dependencies(args['<package>'])
-    else:
-        print('Available packages to find dependency chains:')
-        for p in packages_list:
-            print(p.strip('\n\r'))
-        return
+        value = flatten_list(value) # [[z], [x, c], v] -> [z, x, c, v]
 
-    pos = nx.spring_layout(G, k=1.5)
-    nx.draw(G, pos, with_labels=True, node_color='lightblue', edge_color='gray', node_size=5000)
-    plt.show()
+        value = rstrip_any(value) # python3:any -> python3
+
+        value = list(set(value)) # [qqq, qqq, www] -> [qqq, www]
+
+        pack_dep[key] = value
+
+    if not os.path.exists('packages_dict'):
+        with open('packages_dict', 'w') as file:
+            pprint(pack_dep, stream=file)
+
+    global already_shown
+    already_shown = list()
+    print_dep(args['<package>'])
 
 main()
