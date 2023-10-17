@@ -26,13 +26,6 @@ def arg_parse():
         print('depchain v1.0.0')
         sys.exit()
 
-    global file
-    try:
-        file = gzip.open(args['<file>'], 'rt')
-    except:
-        print('Error. No file found:', args['<file>'], file=sys.stderr)
-        sys.exit(1)
-
 def find_pack_dep(string):
     package_match = re.search(r'Package:\s(.*?)\n', string)
     depends_match = re.search(r'Depends:\s(.*?)\n', string)
@@ -53,9 +46,13 @@ def find_pack_dep(string):
     return package, depends
 
 def read_packages(filename):
-    with gzip.open(filename, 'rt') as file:
-        data = file.read()
-        package_records = re.split(r'\n\n', data)
+    if os.path.exists(args['<file>']):
+        with gzip.open(filename, 'rt') as file:
+            data = file.read()
+            package_records = re.split(r'\n\n', data)
+    else:
+        print(f"No file {args['<file>']} found.", file=sys.stderr)
+        sys.exit(1)
 
     return package_records
 
