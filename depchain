@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 '''
 Usage:
-    depchain.py [options] <file> [<package>]
+    depchain.py [options] <file> <package>
 
 Options:
     -h, --help          Open this message.
@@ -10,9 +10,6 @@ Options:
 
 from docopt import docopt
 import sys
-import subprocess
-import networkx as nx
-import matplotlib.pyplot as plt
 import gzip
 import os
 from pprint import pprint
@@ -90,35 +87,35 @@ def main():
     arg_parse()
 
     # Открываем gz файл и делим данные пакетов
-    packages_info = read_packages('Packages.gz')
+    packages_info = read_packages(args['<file>'])
 
     # Создаем словарь где ключ название пакета, а значение его Depends
     global pack_dep
     pack_dep = {}
     for i in range(len(packages_info)):
-        key, value = find_pack_dep(packages_info[i]) # packages depends full
+        package, depends = find_pack_dep(packages_info[i]) # packages depends full
 
         try:
-            value = value.split(', ')
+            depends = depends.split(', ')
         except:
-            print(value)
+            print(depends)
             sys.exit(1)
 
-        for i in range(len(value)):
-            if '|' not in value[i]:
-                value[i] = value[i].split()[0] # xxx (qqq) -> xxx
+        for i in range(len(depends)):
+            if '|' not in depends[i]:
+                depends[i] = depends[i].split()[0] # xxx (qqq) -> xxx
             else:
-                value[i] = value[i].split(' | ') # xxx | ccc -> [xxx, ccc]
-                for j in range(len(value[i])):
-                    value[i][j] = value[i][j].split()[0] # xxx (qqq) -> xxx
+                depends[i] = depends[i].split(' | ') # xxx | ccc -> [xxx, ccc]
+                for j in range(len(depends[i])):
+                    depends[i][j] = depends[i][j].split()[0] # xxx (qqq) -> xxx
 
-        value = flatten_list(value) # [[z], [x, c], v] -> [z, x, c, v]
+        depends = flatten_list(depends) # [[z], [x, c], v] -> [z, x, c, v]
 
-        value = rstrip_any(value) # python3:any -> python3
+        depends = rstrip_any(depends) # python3:any -> python3
 
-        value = list(set(value)) # [qqq, qqq, www] -> [qqq, www]
+        depends = list(set(depends)) # [qqq, qqq, www] -> [qqq, www]
 
-        pack_dep[key] = value
+        pack_dep[package] = depends
 
     if not os.path.exists('packages_dict'):
         with open('packages_dict', 'w') as file:
