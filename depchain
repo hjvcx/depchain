@@ -4,6 +4,7 @@ Usage:
     depchain.py [options] <file> <package>
 
 Options:
+    -r, --reverse       Makes program find reversed dependencies.
     -h, --help          Open this message.
     -v, --version       Version check and finish program execution.
 '''
@@ -73,7 +74,6 @@ def rstrip_any(o_list):
 
 def print_dep(package_name):
     if package_name in pack_dep and package_name not in already_shown:
-
         already_shown.append(package_name)
         print(package_name, ':', pack_dep[package_name])
         print()
@@ -82,6 +82,19 @@ def print_dep(package_name):
 
     for dep in pack_dep[package_name]:
         print_dep(dep)
+
+def print_rev_dep(package_name):
+    if package_name in pack_dep and package_name not in already_shown:
+        already_shown.append(package_name)
+        print(package_name, ':', pack_dep[package_name])
+        print()
+    else:
+        return
+
+    for pack in pack_dep:
+        for dep in pack_dep[pack]:
+            if dep == package_name:
+                print_rev_dep(pack)
 
 def main():
     arg_parse()
@@ -124,7 +137,10 @@ def main():
     global already_shown
     already_shown = list()
     if args['<package>'] in pack_dep:
-        print_dep(args['<package>'])
+        if args['--reverse']:
+            print_rev_dep(args['<package>'])
+        else:
+            print_dep(args['<package>'])
     else:
         print(f"No package {args['<package>']} found.", file=sys.stderr)
         sys.exit(1)
